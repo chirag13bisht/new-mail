@@ -18,8 +18,8 @@ CLIENT_SECRET = "Hh38Q~ffccw6d6WnCNRlIrnwljKZHn7ucZi13aqO"
 TENANT_ID     = "f14f07b0-a186-41e6-a3b4-19cfd15af98c"
 
 # File Paths (Using Railway Volume)
-DATABASE_FILE  = "/data/MobiFirst_Master_List.xlsx"
-TEMPLATES_FILE = "/data/templates.xlsx"
+DATABASE_FILE  = "MobiFirst_Master_List.xlsx"
+TEMPLATES_FILE = "templates.xlsx"
 
 BATCH_SIZE          = 499       # 499 BCC + 1 TO = 500 max limit
 BATCH_DELAY_SECONDS = 600       # 10 minutes between batches
