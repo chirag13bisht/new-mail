@@ -17,9 +17,12 @@ CLIENT_ID     = "dabde45a-de62-44f1-a15d-1572327a9302"
 CLIENT_SECRET = "Hh38Q~ffccw6d6WnCNRlIrnwljKZHn7ucZi13aqO"
 TENANT_ID     = "f14f07b0-a186-41e6-a3b4-19cfd15af98c"
 
-# File Paths (Using Railway Volume)
+# File Paths (Running directly from the app folder, no Volume)
 DATABASE_FILE  = "MobiFirst_Master_List.xlsx"
 TEMPLATES_FILE = "templates.xlsx"
+
+# The affiliate link to swap into templates
+LINK = "https://jvz8.com/c/1256133/442195/"
 
 BATCH_SIZE          = 499       # 499 BCC + 1 TO = 500 max limit
 BATCH_DELAY_SECONDS = 600       # 10 minutes between batches
@@ -81,7 +84,7 @@ def check_and_delete_bounces(df):
         token = get_access_token()
         headers = {"Authorization": f"Bearer {token}"}
         
-        # Check for emails from the last 2 hours (catches instant and slightly delayed bounces)
+        # Check for emails from the last 2 hours
         two_hours_ago = (datetime.utcnow() - timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
         query_filter = f"receivedDateTime ge {two_hours_ago}"
         url = f"https://graph.microsoft.com/v1.0/users/{SENDER_EMAIL}/messages?$filter={query_filter}&$select=id,subject,from,bodyPreview&$top=50"
@@ -106,7 +109,6 @@ def check_and_delete_bounces(df):
                 is_bounce_text = any(kw in body_text or kw in subject for kw in BOUNCE_KEYWORDS)
                 
                 if is_automated and is_bounce_text:
-                    # Extract the failed email from the bounce message body
                     found_emails = set(re.findall(email_regex, body_text))
                     for failed_email in found_emails:
                         failed_email = failed_email.lower().strip()
@@ -114,7 +116,6 @@ def check_and_delete_bounces(df):
                             df.loc[df['Email Address'].str.lower() == failed_email, 'Status'] = 'Bounced'
                             print(f"      -> Marked Bounced: {failed_email}")
                     
-                    # Delete the receipt
                     requests.delete(f"https://graph.microsoft.com/v1.0/users/{SENDER_EMAIL}/messages/{msg_id}", headers=headers)
                     deleted_count += 1
             
@@ -143,14 +144,14 @@ def main():
             print(f"❌ Cannot read Master List: {e}")
             break
 
-        # 2. Dynamically Load Templates (allows hot-swapping templates while running)
+        # 2. Dynamically Load Templates
         try:
             templates_df = pd.read_excel(TEMPLATES_FILE)
             templates = templates_df.to_dict('records')
             if not templates:
                 raise ValueError("Template file is empty.")
         except Exception as e:
-            print(f"❌ Cannot read templates.xlsx: {e}")
+            print(f"❌ Cannot read {TEMPLATES_FILE}: {e}")
             time.sleep(60)
             continue
 
@@ -173,10 +174,14 @@ def main():
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Sending batch of {len(recipients)} via BCC...")
         print(f"    Using Template: {template.get('Subject', 'No Subject')}")
         
+        # Grab raw text from Excel
         raw_body = str(template.get('Body', ''))
         
-        # Automatically convert Excel newlines and spaces to HTML
-        html_safe_body = raw_body.replace('\n', '<br>').replace('  ', '&nbsp;&nbsp;')
+        # 1. Force all hidden Excel line breaks to become proper HTML line breaks
+        html_safe_body = raw_body.replace('\r\n', '<br>').replace('\n', '<br>')
+        
+        # 2. Automatically turn [Anything in Brackets] into a clickable JVZoo link!
+        html_safe_body = re.sub(r'\[(.*?)\]', rf'<a href="{LINK}">\1</a>', html_safe_body)
         
         success = send_email_batch_bcc(recipients, template.get('Subject', ''), html_safe_body)
 
